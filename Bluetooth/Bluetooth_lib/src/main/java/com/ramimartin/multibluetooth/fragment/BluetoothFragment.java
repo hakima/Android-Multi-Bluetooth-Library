@@ -5,7 +5,7 @@ import android.content.Intent;
 import android.os.Bundle;
 import android.support.v4.app.Fragment;
 
-import com.ramimartin.multibluetooth.bluetooth.mananger.BluetoothManager;
+import com.ramimartin.multibluetooth.bluetooth.manager.BluetoothManager;
 import com.ramimartin.multibluetooth.bus.BluetoothCommunicator;
 import com.ramimartin.multibluetooth.bus.BondedDevice;
 import com.ramimartin.multibluetooth.bus.ClientConnectionFail;
@@ -27,7 +27,6 @@ public abstract class BluetoothFragment extends Fragment {
         super.onActivityCreated(savedInstanceState);
         mBluetoothManager = new BluetoothManager(getActivity());
         checkBluetoothAviability();
-        mBluetoothManager.setNbrClientMax(myNbrClientMax());
     }
 
     @Override
@@ -68,16 +67,13 @@ public abstract class BluetoothFragment extends Fragment {
         }
     }
 
-    public void setTimeDiscoverable(int timeInSec){
-        mBluetoothManager.setTimeDiscoverable(timeInSec);
-    }
 
     public void startDiscovery(){
         mBluetoothManager.startDiscovery();
     }
 
     public boolean isConnected(){
-        return mBluetoothManager.isConnected;
+        return mBluetoothManager.isConnected();
     }
 
     public void scanAllBluetoothDevice(){
@@ -90,10 +86,6 @@ public abstract class BluetoothFragment extends Fragment {
 
     public void disconnectServer(){
         mBluetoothManager.disconnectServer();
-    }
-
-    public void createServeur(String address){
-        mBluetoothManager.createServeur(address);
     }
 
     public void selectServerMode(){
@@ -111,10 +103,6 @@ public abstract class BluetoothFragment extends Fragment {
         return mBluetoothManager.mType;
     }
 
-    public void createClient(String addressMac){
-        mBluetoothManager.createClient(addressMac);
-    }
-
     public void sendMessage(String message){
         mBluetoothManager.sendMessage(message);
     }
@@ -130,30 +118,22 @@ public abstract class BluetoothFragment extends Fragment {
     public abstract void onBluetoothNotAviable();
 
     public void onEventMainThread(BluetoothDevice device){
-        if(!mBluetoothManager.isNbrMaxReached()){
             onBluetoothDeviceFound(device);
-            createServeur(device.getAddress());
-        }
     }
 
     public void onEventMainThread(ClientConnectionSuccess event){
-        mBluetoothManager.isConnected = true;
         onClientConnectionSuccess();
     }
 
     public void onEventMainThread(ClientConnectionFail event){
-        mBluetoothManager.isConnected = false;
         onClientConnectionFail();
     }
 
     public void onEventMainThread(ServeurConnectionSuccess event){
-        mBluetoothManager.isConnected = true;
-        mBluetoothManager.onServerConnectionSuccess(event.mClientAdressConnected);
         onServeurConnectionSuccess();
     }
 
     public void onEventMainThread(ServeurConnectionFail event){
-        mBluetoothManager.onServerConnectionFailed(event.mClientAdressConnectionFail);
         onServeurConnectionFail();
     }
 

@@ -6,7 +6,7 @@ import android.bluetooth.BluetoothDevice;
 import android.content.Intent;
 import android.os.IBinder;
 
-import com.ramimartin.multibluetooth.bluetooth.mananger.BluetoothManager;
+import com.ramimartin.multibluetooth.bluetooth.manager.BluetoothManager;
 import com.ramimartin.multibluetooth.bus.BluetoothCommunicator;
 import com.ramimartin.multibluetooth.bus.BondedDevice;
 import com.ramimartin.multibluetooth.bus.ClientConnectionFail;
@@ -55,7 +55,6 @@ public abstract class BluetoothService extends Service {
     public int onStartCommand(Intent intent, int flags, int startId) {
         if(!EventBus.getDefault().isRegistered(this))
             EventBus.getDefault().register(this);
-        mBluetoothManager.setNbrClientMax(myNbrClientMax());
 
         return START_NOT_STICKY;
 
@@ -69,10 +68,6 @@ public abstract class BluetoothService extends Service {
         if(!mBluetoothManager.checkBluetoothAviability()){
             onBluetoothNotAviable();
         }
-    }
-
-    public void setTimeDiscoverable(int timeInSec){
-        mBluetoothManager.setTimeDiscoverable(timeInSec);
     }
 
     public void startDiscovery(){
@@ -91,10 +86,6 @@ public abstract class BluetoothService extends Service {
         mBluetoothManager.disconnectServer();
     }
 
-    public void createServeur(String address){
-        mBluetoothManager.createServeur(address);
-    }
-
     public void selectServerMode(){
         mBluetoothManager.selectServerMode();
     }
@@ -110,16 +101,12 @@ public abstract class BluetoothService extends Service {
         return mBluetoothManager.mType;
     }
 
-    public void createClient(String addressMac){
-        mBluetoothManager.createClient(addressMac);
-    }
-
     public void sendMessage(String message){
         mBluetoothManager.sendMessage(message);
     }
 
     public boolean isConnected(){
-        return mBluetoothManager.isConnected;
+        return mBluetoothManager.isConnected();
     }
 
     public abstract int myNbrClientMax();
@@ -134,27 +121,21 @@ public abstract class BluetoothService extends Service {
 
     public void onEventMainThread(BluetoothDevice device){
         onBluetoothDeviceFound(device);
-        createServeur(device.getAddress());
     }
 
     public void onEventMainThread(ClientConnectionSuccess event){
-        mBluetoothManager.isConnected = true;
         onClientConnectionSuccess();
     }
 
     public void onEventMainThread(ClientConnectionFail event){
-        mBluetoothManager.isConnected = false;
         onClientConnectionFail();
     }
 
     public void onEventMainThread(ServeurConnectionSuccess event){
-        mBluetoothManager.isConnected = true;
-        mBluetoothManager.onServerConnectionSuccess(event.mClientAdressConnected);
         onServeurConnectionSuccess();
     }
 
     public void onEventMainThread(ServeurConnectionFail event){
-        mBluetoothManager.onServerConnectionFailed(event.mClientAdressConnectionFail);
         onServeurConnectionFail();
     }
 

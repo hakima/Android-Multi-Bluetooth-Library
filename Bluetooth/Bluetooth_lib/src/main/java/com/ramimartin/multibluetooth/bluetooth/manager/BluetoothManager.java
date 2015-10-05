@@ -1,4 +1,4 @@
-package com.ramimartin.multibluetooth.bluetooth.mananger;
+package com.ramimartin.multibluetooth.bluetooth.manager;
 
 import android.app.Activity;
 import android.app.Service;
@@ -13,18 +13,29 @@ import android.util.Log;
 import com.ramimartin.multibluetooth.activity.EnableBluetoothDiscoveryActivity;
 import com.ramimartin.multibluetooth.bluetooth.client.BluetoothClient;
 import com.ramimartin.multibluetooth.bluetooth.server.BluetoothServer;
-import com.ramimartin.multibluetooth.bus.BondedDevice;
+import com.ramimartin.multibluetooth.bus.*;
 
-import java.util.ArrayList;
-import java.util.HashMap;
-import java.util.Map;
+import java.lang.reflect.Method;
+import java.util.*;
 
 import de.greenrobot.event.EventBus;
 
 /**
  * Created by Rami MARTIN on 13/04/2014.
+ * Edited by Utsav Drolia
  */
 public class BluetoothManager extends BroadcastReceiver {
+
+    private static final String SERVER_NAME = "HyraxServer";
+    private static final String CLIENT_NAME = "HyraxClient";
+    private static final int CLIENT_HOLDOFF = 5000;
+    private static final long SCAN_DELAY = 15000;
+    private static final long SCAN_INTERVAL = 30000;
+
+    public boolean isConnected()
+    {
+        return isConnected;
+    }
 
     public enum TypeBluetooth{
         Client,
@@ -59,9 +70,10 @@ public class BluetoothManager extends BroadcastReceiver {
     private int mNbrClientConnection;
     public TypeBluetooth mType;
     private int mTimeDiscoverable;
-    public boolean isConnected;
+    private boolean isConnected;
     private boolean mBluetoothIsEnableOnStart;
     private String mBluetoothNameSaved;
+    private Timer mScanTimer;
 
     public BluetoothManager(Activity activity) {
         mService = null;
@@ -71,11 +83,13 @@ public class BluetoothManager extends BroadcastReceiver {
         mBluetoothIsEnableOnStart = mBluetoothAdapter.isEnabled();
         mType = TypeBluetooth.None;
         isConnected = false;
+        mScanTimer = new Timer();
         mNbrClientConnection = 0;
         mAdressListServerWaitingConnection = new ArrayList<String>();
         mServeurWaitingConnectionList = new HashMap<String, BluetoothServer>();
         mServeurConnectedList = new ArrayList<BluetoothServer>();
         mServeurThreadList = new HashMap<String, Thread>();
+        EventBus.getDefault().register(this);
         //setTimeDiscoverable(BLUETOOTH_TIME_DICOVERY_300_SEC);
     }
 
@@ -93,23 +107,43 @@ public class BluetoothManager extends BroadcastReceiver {
         mServeurWaitingConnectionList = new HashMap<String, BluetoothServer>();
         mServeurConnectedList = new ArrayList<BluetoothServer>();
         mServeurThreadList = new HashMap<String, Thread>();
+        EventBus.getDefault().register(this);
         //setTimeDiscoverable(BLUETOOTH_TIME_DICOVERY_300_SEC);
     }
 
+    /**
+     * Become the server and start scanning for clients immediately
+     */
     public void selectServerMode(){
-        startDiscovery();
         mType = TypeBluetooth.Server;
+        setTimeDiscoverable(BLUETOOTH_TIME_DICOVERY_3600_SEC);
         setServerBluetoothName();
+        startDiscovery();
+        scanAllBluetoothDevice();
     }
 
     private void setServerBluetoothName(){
-        mBluetoothAdapter.setName("Server " + (getNbrClientMax()-mNbrClientConnection) + " places available " + android.os.Build.MODEL);
+        mBluetoothAdapter.setName(SERVER_NAME);
     }
 
+    /**
+    * Become the client and start scanning for server after few seconds
+    */
     public void selectClientMode(){
-        startDiscovery();
         mType = TypeBluetooth.Client;
-        mBluetoothAdapter.setName("Client "+android.os.Build.MODEL);
+        setTimeDiscoverable(BLUETOOTH_TIME_DICOVERY_3600_SEC);
+        mBluetoothAdapter.setName(CLIENT_NAME);
+        startDiscovery();
+
+        Timer t = new Timer();
+        t.schedule(new TimerTask()
+        {
+            @Override
+            public void run()
+            {
+                scanAllBluetoothDevice();
+            }
+        }, CLIENT_HOLDOFF);
     }
 
     public String getYourBtMacAddress(){
@@ -125,21 +159,21 @@ public class BluetoothManager extends BroadcastReceiver {
         }
     }
 
-    public int getNbrClientMax(){
+    private int getNbrClientMax(){
         return BLUETOOTH_NBR_CLIENT_MAX;
     }
 
-    public boolean isNbrMaxReached(){
+    private boolean isNbrMaxReached(){
         return mNbrClientConnection == getNbrClientMax();
     }
 
-    public void setServerWaitingConnection(String address, BluetoothServer bluetoothServer, Thread threadServer){
+    private void setServerWaitingConnection(String address, BluetoothServer bluetoothServer, Thread threadServer){
         mAdressListServerWaitingConnection.add(address);
         mServeurWaitingConnectionList.put(address, bluetoothServer);
         mServeurThreadList.put(address, threadServer);
     }
 
-    public void incrementNbrConnection(){
+    private void incrementNbrConnection(){
         mNbrClientConnection = mNbrClientConnection +1;
         setServerBluetoothName();
         if(mNbrClientConnection == getNbrClientMax()){
@@ -164,7 +198,7 @@ public class BluetoothManager extends BroadcastReceiver {
         mServeurWaitingConnectionList.clear();
     }
 
-    public void decrementNbrConnection(){
+    private void decrementNbrConnection(){
         if(mNbrClientConnection ==0){
             return;
         }
@@ -176,7 +210,7 @@ public class BluetoothManager extends BroadcastReceiver {
         setServerBluetoothName();
     }
 
-    public void setTimeDiscoverable(int timeInSec){
+    private void setTimeDiscoverable(int timeInSec){
         mTimeDiscoverable = timeInSec;
         BLUETOOTH_REQUEST_ACCEPTED = mTimeDiscoverable;
     }
@@ -209,9 +243,18 @@ public class BluetoothManager extends BroadcastReceiver {
             } else {
                 Log.e("", "===> startDiscovery");
                 if (mActivity != null) {
-                    Intent discoverableIntent = new Intent(BluetoothAdapter.ACTION_REQUEST_DISCOVERABLE);
-                    discoverableIntent.putExtra(BluetoothAdapter.EXTRA_DISCOVERABLE_DURATION, mTimeDiscoverable);
-                    mActivity.startActivityForResult(discoverableIntent, REQUEST_DISCOVERABLE_CODE);
+                    Method method;
+                    try {
+                        method = mBluetoothAdapter.getClass().getMethod("setScanMode", int.class, int.class);
+                        method.invoke(mBluetoothAdapter,BluetoothAdapter.SCAN_MODE_CONNECTABLE_DISCOVERABLE, mTimeDiscoverable);
+                        Log.e("invoke","method invoke successfully");
+                    }
+                    catch (Exception e){
+                        e.printStackTrace();
+                    }
+//                    Intent discoverableIntent = new Intent(BluetoothAdapter.ACTION_REQUEST_DISCOVERABLE);
+//                    discoverableIntent.putExtra(BluetoothAdapter.EXTRA_DISCOVERABLE_DURATION, mTimeDiscoverable);
+//                    mActivity.startActivityForResult(discoverableIntent, REQUEST_DISCOVERABLE_CODE);
                 }
                 else {
                     Intent intent = new Intent(mService.getApplicationContext(), EnableBluetoothDiscoveryActivity.class);
@@ -225,44 +268,82 @@ public class BluetoothManager extends BroadcastReceiver {
         }
     }
 
+    /**
+     * Start Scanning for devices nearby
+     */
+    private void startScanning()
+    {
+        mBluetoothAdapter.startDiscovery();
+        mScanTimer.schedule(new TimerTask()
+        {
+            @Override
+            public void run()
+            {
+                mBluetoothAdapter.startDiscovery();
+            }
+        }, SCAN_DELAY, SCAN_INTERVAL);
+    }
+
+    /**
+     * Stop Scanning for devices nearby
+     */
+    private void stopScanning()
+    {
+        mBluetoothAdapter.cancelDiscovery();
+        mScanTimer.cancel();
+    }
+
     public void scanAllBluetoothDevice() {
         IntentFilter intentFilter = new IntentFilter(BluetoothDevice.ACTION_FOUND);
         if (mActivity != null)
             mActivity.registerReceiver(this, intentFilter);
         else
             mService.registerReceiver(this, intentFilter);
-        mBluetoothAdapter.startDiscovery();
+        startScanning();
     }
 
-    public void createClient(String addressMac) {
-        if(mType == TypeBluetooth.Client) {
+    private void createClient(String addressMac) {
+        if(mType == TypeBluetooth.Client && !isConnected)
+        {
             IntentFilter bondStateIntent = new IntentFilter(BluetoothDevice.ACTION_BOND_STATE_CHANGED);
             if (mActivity != null)
                 mActivity.registerReceiver(this, bondStateIntent);
             else
                 mService.registerReceiver(this, bondStateIntent);
+            stopScanning();
             mBluetoothClient = new BluetoothClient(mBluetoothAdapter, addressMac);
             new Thread(mBluetoothClient).start();
         }
     }
 
-    public void createServeur(String address){
-        if(mType == TypeBluetooth.Server && !mAdressListServerWaitingConnection.contains(address)) {
-            BluetoothServer mBluetoothServer = new BluetoothServer(mBluetoothAdapter, address);
-            Thread threadServer = new Thread(mBluetoothServer);
-            threadServer.start();
-            setServerWaitingConnection(address, mBluetoothServer, threadServer);
-            IntentFilter bondStateIntent = new IntentFilter(BluetoothDevice.ACTION_BOND_STATE_CHANGED);
-            if (mActivity != null)
-                mActivity.registerReceiver(this, bondStateIntent);
-            else
-                mService.registerReceiver(this, bondStateIntent);
-            Log.e("", "===> createServeur address : " + address);
+    private void createServeur(String address){
+        if(mType == TypeBluetooth.Server && !mAdressListServerWaitingConnection.contains(address))
+        {
+            if(!isNbrMaxReached())
+            {
+                BluetoothServer mBluetoothServer = new BluetoothServer(mBluetoothAdapter, address);
+                Thread threadServer = new Thread(mBluetoothServer);
+                threadServer.start();
+                setServerWaitingConnection(address, mBluetoothServer, threadServer);
+                IntentFilter bondStateIntent = new IntentFilter(BluetoothDevice.ACTION_BOND_STATE_CHANGED);
+                if (mActivity != null)
+                    mActivity.registerReceiver(this, bondStateIntent);
+                else
+                    mService.registerReceiver(this, bondStateIntent);
+                Log.e("", "===> createServeur address : " + address);
+            }
         }
     }
 
-    public void onServerConnectionSuccess(String addressClientConnected){
-        for(Map.Entry<String, BluetoothServer> bluetoothServerMap : mServeurWaitingConnectionList.entrySet()){
+    /**
+     * If Server gets connected to client, add to list and increment number of connected clients.
+     * If number of clients reached max, stop scanning.
+     * @param addressClientConnected
+     */
+    private void onServerConnectionSuccess(String addressClientConnected)
+    {
+        for(Map.Entry<String, BluetoothServer> bluetoothServerMap : mServeurWaitingConnectionList.entrySet())
+        {
             if(addressClientConnected.equals(bluetoothServerMap.getValue().getClientAddress())){
                 mServeurConnectedList.add(bluetoothServerMap.getValue());
                 incrementNbrConnection();
@@ -270,12 +351,20 @@ public class BluetoothManager extends BroadcastReceiver {
                 return;
             }
         }
+        if(isNbrMaxReached())
+        {
+            Log.e("BlueToothManager","Reached Max. Stopping scans");
+            stopScanning();
+        }
     }
 
-    public void onServerConnectionFailed(String addressClientConnectionFailed){
+    private void onServerConnectionFailed(String addressClientConnectionFailed)
+    {
         int index = 0;
-        for(BluetoothServer bluetoothServer : mServeurConnectedList){
-            if(addressClientConnectionFailed.equals(bluetoothServer.getClientAddress())){
+        for(BluetoothServer bluetoothServer : mServeurConnectedList)
+        {
+            if(addressClientConnectionFailed.equals(bluetoothServer.getClientAddress()))
+            {
                 mServeurConnectedList.get(index).closeConnection();
                 mServeurConnectedList.remove(index);
                 mServeurWaitingConnectionList.get(addressClientConnectionFailed).closeConnection();
@@ -289,13 +378,38 @@ public class BluetoothManager extends BroadcastReceiver {
             }
             index++;
         }
+        if(!isNbrMaxReached())
+            startScanning();
+    }
+
+    public void onEvent(ClientConnectionSuccess event)
+    {
+        isConnected = true;
+    }
+
+    public void onEvent(ClientConnectionFail event)
+    {
+        isConnected = false;
+        startScanning();
+    }
+
+    public void onEvent(ServeurConnectionSuccess event)
+    {
+        isConnected = true;
+        onServerConnectionSuccess(event.mClientAdressConnected);
+    }
+
+    public void onEvent(ServeurConnectionFail event)
+    {
+        onServerConnectionFailed(event.mClientAdressConnectionFail);
     }
 
     public void sendMessage(String message) {
         if(mType != null && isConnected){
             if(mServeurConnectedList!= null){
-                for(int i=0; i < mServeurConnectedList.size(); i++){
-                    mServeurConnectedList.get(i).write(message);
+                for (BluetoothServer aMServeurConnectedList : mServeurConnectedList)
+                {
+                    aMServeurConnectedList.write(message);
                 }
             }
             if(mBluetoothClient != null){
@@ -309,11 +423,30 @@ public class BluetoothManager extends BroadcastReceiver {
         BluetoothDevice device = intent.getParcelableExtra(BluetoothDevice.EXTRA_DEVICE);
         Log.e("BluetoohManager", "onReceive() " + intent.getAction());
 
-        if (intent.getAction().equals(BluetoothDevice.ACTION_FOUND)) {
-            if((mType == TypeBluetooth.Client && !isConnected)
-                    || (mType == TypeBluetooth.Server && !mAdressListServerWaitingConnection.contains(device.getAddress()))){
+        if (intent.getAction().equals(BluetoothDevice.ACTION_FOUND))
+        {
+//            if((mType == TypeBluetooth.Client && !isConnected)
+//                    || (mType == TypeBluetooth.Server && !mAdressListServerWaitingConnection.contains(device.getAddress()))){
 
+            if(device.getName()!=null)
+            {
                 EventBus.getDefault().post(device);
+                if (mType == TypeBluetooth.Client)
+                {
+                    if (device.getName().equals(SERVER_NAME))
+                    {
+
+                        createClient(device.getAddress());
+                    }
+                } else if (mType == TypeBluetooth.Server)
+                {
+                    if (device.getName().equals(CLIENT_NAME))
+                    {
+
+                        createServeur(device.getAddress());
+                    }
+                }
+//            }
             }
         }
         if(intent.getAction().equals(BluetoothDevice.ACTION_BOND_STATE_CHANGED)){
@@ -346,11 +479,12 @@ public class BluetoothManager extends BroadcastReceiver {
 
     public void resetServer(){
         if(mServeurConnectedList != null){
-            for(int i=0; i < mServeurConnectedList.size(); i++) {
-                mServeurConnectedList.get(i).closeConnection();
+            for (BluetoothServer aMServeurConnectedList : mServeurConnectedList)
+            {
+                aMServeurConnectedList.closeConnection();
             }
+            mServeurConnectedList.clear();
         }
-        mServeurConnectedList.clear();
     }
 
     public void resetClient(){

@@ -48,7 +48,7 @@ public class BluetoothClient implements Runnable {
 //        uuidCandidates.add(mUuid);
 
         while(mInputStream == null){
-            mBluetoothConnector = new BluetoothConnector(mBluetoothDevice, true, mBluetoothAdapter, mUuid);
+            mBluetoothConnector = new BluetoothConnector(mBluetoothDevice, false, mBluetoothAdapter, mUuid);
 
             try {
                 mSocket = mBluetoothConnector.connect().getUnderlyingSocket();

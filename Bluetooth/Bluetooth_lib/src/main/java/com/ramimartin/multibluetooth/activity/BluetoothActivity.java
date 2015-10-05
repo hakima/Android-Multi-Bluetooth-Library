@@ -5,7 +5,7 @@ import android.bluetooth.BluetoothDevice;
 import android.content.Intent;
 import android.os.Bundle;
 
-import com.ramimartin.multibluetooth.bluetooth.mananger.BluetoothManager;
+import com.ramimartin.multibluetooth.bluetooth.manager.BluetoothManager;
 import com.ramimartin.multibluetooth.bus.BluetoothCommunicator;
 import com.ramimartin.multibluetooth.bus.BondedDevice;
 import com.ramimartin.multibluetooth.bus.ClientConnectionFail;
@@ -34,7 +34,6 @@ public abstract class BluetoothActivity extends Activity {
         super.onStart();
         if(!EventBus.getDefault().isRegistered(this))
         EventBus.getDefault().register(this);
-        mBluetoothManager.setNbrClientMax(myNbrClientMax());
     }
 
     @Override
@@ -66,10 +65,6 @@ public abstract class BluetoothActivity extends Activity {
         }
     }
 
-    public void setTimeDiscoverable(int timeInSec){
-        mBluetoothManager.setTimeDiscoverable(timeInSec);
-    }
-
     public void startDiscovery(){
         mBluetoothManager.startDiscovery();
     }
@@ -86,12 +81,9 @@ public abstract class BluetoothActivity extends Activity {
         mBluetoothManager.disconnectServer();
     }
 
-    public void createServeur(String address){
-        mBluetoothManager.createServeur(address);
-    }
-
     public void selectServerMode(){
         mBluetoothManager.selectServerMode();
+        mBluetoothManager.setNbrClientMax(myNbrClientMax());
     }
     public void selectClientMode(){
         mBluetoothManager.selectClientMode();
@@ -105,16 +97,12 @@ public abstract class BluetoothActivity extends Activity {
         return mBluetoothManager.mType;
     }
 
-    public void createClient(String addressMac){
-        mBluetoothManager.createClient(addressMac);
-    }
-
     public void sendMessage(String message){
         mBluetoothManager.sendMessage(message);
     }
 
     public boolean isConnected(){
-        return mBluetoothManager.isConnected;
+        return mBluetoothManager.isConnected();
     }
 
     public abstract int myNbrClientMax();
@@ -129,27 +117,21 @@ public abstract class BluetoothActivity extends Activity {
 
     public void onEventMainThread(BluetoothDevice device){
         onBluetoothDeviceFound(device);
-        createServeur(device.getAddress());
     }
 
     public void onEventMainThread(ClientConnectionSuccess event){
-        mBluetoothManager.isConnected = true;
         onClientConnectionSuccess();
     }
 
     public void onEventMainThread(ClientConnectionFail event){
-        mBluetoothManager.isConnected = false;
         onClientConnectionFail();
     }
 
     public void onEventMainThread(ServeurConnectionSuccess event){
-        mBluetoothManager.isConnected = true;
-        mBluetoothManager.onServerConnectionSuccess(event.mClientAdressConnected);
         onServeurConnectionSuccess();
     }
 
     public void onEventMainThread(ServeurConnectionFail event){
-        mBluetoothManager.onServerConnectionFailed(event.mClientAdressConnectionFail);
         onServeurConnectionFail();
     }
 

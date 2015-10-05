@@ -40,7 +40,8 @@ public class BluetoothServer implements Runnable {
     @Override
     public void run() {
         try {
-            mServerSocket = mBluetoothAdapter.listenUsingRfcommWithServiceRecord("BLTServer", mUUID);
+            mServerSocket = mBluetoothAdapter.listenUsingInsecureRfcommWithServiceRecord("BLTServer", mUUID);
+            //mServerSocket = mBluetoothAdapter.listenUsingRfcommWithServiceRecord("BLTServer", mUUID);
             mSocket = mServerSocket.accept();
             mInputStream = mSocket.getInputStream();
             mOutputStreamWriter = new OutputStreamWriter(mSocket.getOutputStream());
