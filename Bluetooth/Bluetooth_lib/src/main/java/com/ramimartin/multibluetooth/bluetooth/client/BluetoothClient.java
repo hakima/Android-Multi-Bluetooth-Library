@@ -9,9 +9,7 @@ import com.ramimartin.multibluetooth.bus.BluetoothCommunicator;
 import com.ramimartin.multibluetooth.bus.ClientConnectionFail;
 import com.ramimartin.multibluetooth.bus.ClientConnectionSuccess;
 
-import java.io.IOException;
-import java.io.InputStream;
-import java.io.OutputStreamWriter;
+import java.io.*;
 import java.util.UUID;
 
 import de.greenrobot.event.EventBus;
@@ -19,110 +17,120 @@ import de.greenrobot.event.EventBus;
 /**
  * Created by Rami MARTIN on 13/04/2014.
  */
-public class BluetoothClient implements Runnable {
+public class BluetoothClient implements Runnable
+{
+    private final int TRIES = 20;
 
     private boolean CONTINUE_READ_WRITE = true;
 
     private BluetoothAdapter mBluetoothAdapter;
     private BluetoothDevice mBluetoothDevice;
     private UUID mUuid;
-    private String mAdressMac;
+    private String mServerAddress;
 
     private BluetoothSocket mSocket;
-    private InputStream mInputStream;
-    private OutputStreamWriter mOutputStreamWriter;
+    private DataOutputStream mDataOutputStream;
+    private DataInputStream mDataInputStream;
 
     private BluetoothConnector mBluetoothConnector;
 
-    public BluetoothClient(BluetoothAdapter bluetoothAdapter, String adressMac) {
+    public BluetoothClient(BluetoothAdapter bluetoothAdapter, String adressMac)
+    {
         mBluetoothAdapter = bluetoothAdapter;
-        mAdressMac = adressMac;
+        mServerAddress = adressMac;
         mUuid = UUID.fromString("e0917680-d427-11e4-8830-" + bluetoothAdapter.getAddress().replace(":", ""));
     }
 
     @Override
-    public void run() {
+    public void run()
+    {
 
-        mBluetoothDevice = mBluetoothAdapter.getRemoteDevice(mAdressMac);
+        mBluetoothDevice = mBluetoothAdapter.getRemoteDevice(mServerAddress);
 //        List<UUID> uuidCandidates = new ArrayList<UUID>();
 //        uuidCandidates.add(mUuid);
-
-        while(mInputStream == null){
-            mBluetoothConnector = new BluetoothConnector(mBluetoothDevice, false, mBluetoothAdapter, mUuid);
-
-            try {
+        int tries = 0;
+        while (mSocket == null && tries<=TRIES)
+        {
+            tries++;
+            try
+            {
+                Thread.sleep(500);
+                mBluetoothConnector = new BluetoothConnector(mBluetoothDevice, true, mBluetoothAdapter, mUuid);
                 mSocket = mBluetoothConnector.connect().getUnderlyingSocket();
-                mInputStream = mSocket.getInputStream();
-            } catch (IOException e1) {
+            } catch (IOException e1)
+            {
                 Log.e("", "===> mSocket IOException", e1);
-                EventBus.getDefault().post(new ClientConnectionFail());
+                //EventBus.getDefault().post(new ClientConnectionFail());
                 e1.printStackTrace();
+            } catch (InterruptedException e)
+            {
+                e.printStackTrace();
             }
         }
 
-        if (mSocket == null) {
+        if (mSocket == null)
+        {
             Log.e("", "===> mSocket == Null");
+            EventBus.getDefault().post(new ClientConnectionFail());
             return;
         }
 
-        try {
-
-            mOutputStreamWriter = new OutputStreamWriter(mSocket.getOutputStream());
-
-            int bufferSize = 1024;
-            int bytesRead = -1;
-            byte[] buffer = new byte[bufferSize];
-
+        try
+        {
+            mDataInputStream = new DataInputStream(new BufferedInputStream(mSocket.getInputStream()));
+            mDataOutputStream = new DataOutputStream(new BufferedOutputStream(mSocket.getOutputStream()));
             EventBus.getDefault().post(new ClientConnectionSuccess());
-
-            while (CONTINUE_READ_WRITE) {
-
-                final StringBuilder sb = new StringBuilder();
-                bytesRead = mInputStream.read(buffer);
-                if (bytesRead != -1) {
-                    String result = "";
-                    while ((bytesRead == bufferSize) && (buffer[bufferSize] != 0)) {
-                        result = result + new String(buffer, 0, bytesRead);
-                        bytesRead = mInputStream.read(buffer);
-                    }
-                    result = result + new String(buffer, 0, bytesRead);
-                    sb.append(result);
-                }
-
-                 EventBus.getDefault().post(new BluetoothCommunicator(sb.toString()));
-
+            int len;
+            while (CONTINUE_READ_WRITE)
+            {
+                len = mDataInputStream.readInt();
+                byte[] buffer = new byte[len];
+                mDataInputStream.read(buffer);
+                EventBus.getDefault().post(new BluetoothCommunicator(mServerAddress, buffer));
             }
-        } catch (IOException e) {
+
+        } catch (IOException e)
+        {
             Log.e("", "===> Client run");
             e.printStackTrace();
             EventBus.getDefault().post(new ClientConnectionFail());
         }
     }
 
-    public void write(String message) {
-        try {
-            mOutputStreamWriter.write(message);
-            mOutputStreamWriter.flush();
-        } catch (IOException e) {
-            Log.e("", "===> Client write");
+    public synchronized void write(byte[] message)
+    {
+        try
+        {
+            if (mDataOutputStream != null)
+            {
+                mDataOutputStream.writeInt(message.length);
+                mDataOutputStream.write(message);
+                mDataOutputStream.flush();
+            }
+        } catch (IOException e)
+        {
             e.printStackTrace();
         }
     }
 
-    public void closeConnexion() {
-        if (mSocket != null) {
-            try {
-                mInputStream.close();
-                mInputStream = null;
-                mOutputStreamWriter.close();
-                mOutputStreamWriter = null;
+    public void closeConnexion()
+    {
+        CONTINUE_READ_WRITE = false;
+        if (mSocket != null)
+        {
+            try
+            {
+                mDataInputStream.close();
+                mDataInputStream = null;
+                mDataOutputStream.close();
+                mDataOutputStream = null;
                 mSocket.close();
                 mSocket = null;
                 mBluetoothConnector.close();
-            } catch (Exception e) {
+            } catch (Exception e)
+            {
                 Log.e("", "===> Client closeConnexion");
             }
-            CONTINUE_READ_WRITE = false;
         }
     }
 }

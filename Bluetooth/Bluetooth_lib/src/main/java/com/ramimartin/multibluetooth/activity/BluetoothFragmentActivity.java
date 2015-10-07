@@ -101,7 +101,7 @@ public abstract class BluetoothFragmentActivity extends FragmentActivity {
     }
 
     public void sendMessage(String message){
-        mBluetoothManager.sendMessage(message);
+        mBluetoothManager.sendMessage(message.getBytes());
     }
 
     public abstract int myNbrClientMax();
@@ -135,7 +135,7 @@ public abstract class BluetoothFragmentActivity extends FragmentActivity {
     }
 
     public void onEventMainThread(BluetoothCommunicator event){
-        onBluetoothCommunicator(event.mMessageReceive);
+        onBluetoothCommunicator(new String(event.mMessageReceive));
     }
 
     public void onEventMainThread(BondedDevice event){

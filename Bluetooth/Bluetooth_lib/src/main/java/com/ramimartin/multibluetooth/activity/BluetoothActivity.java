@@ -98,7 +98,7 @@ public abstract class BluetoothActivity extends Activity {
     }
 
     public void sendMessage(String message){
-        mBluetoothManager.sendMessage(message);
+        mBluetoothManager.sendMessage(message.getBytes());
     }
 
     public boolean isConnected(){
@@ -112,7 +112,7 @@ public abstract class BluetoothActivity extends Activity {
     public abstract void onServeurConnectionSuccess();
     public abstract void onServeurConnectionFail();
     public abstract void onBluetoothStartDiscovery();
-    public abstract void onBluetoothCommunicator(String messageReceive);
+    public abstract void onBluetoothCommunicator(String messageReceive, String mDevice);
     public abstract void onBluetoothNotAviable();
 
     public void onEventMainThread(BluetoothDevice device){
@@ -136,7 +136,7 @@ public abstract class BluetoothActivity extends Activity {
     }
 
     public void onEventMainThread(BluetoothCommunicator event){
-        onBluetoothCommunicator(event.mMessageReceive);
+        onBluetoothCommunicator(new String(event.mMessageReceive), event.mDevice);
     }
 
     public void onEventMainThread(BondedDevice event){

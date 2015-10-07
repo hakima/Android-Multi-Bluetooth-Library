@@ -34,7 +34,7 @@ public class BluetoothConnector {
         this.device = device;
         this.secure = secure;
         this.adapter = adapter;
-        this.uuidCandidates = new ArrayList<UUID>();
+        this.uuidCandidates = new ArrayList<>();
         this.uuidCandidates.add(uuid);
 
         if (this.uuidCandidates == null || this.uuidCandidates.isEmpty()) {

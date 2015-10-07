@@ -102,7 +102,7 @@ public abstract class BluetoothService extends Service {
     }
 
     public void sendMessage(String message){
-        mBluetoothManager.sendMessage(message);
+        mBluetoothManager.sendMessage(message.getBytes());
     }
 
     public boolean isConnected(){
@@ -140,7 +140,7 @@ public abstract class BluetoothService extends Service {
     }
 
     public void onEventMainThread(BluetoothCommunicator event){
-        onBluetoothCommunicator(event.mMessageReceive);
+        onBluetoothCommunicator(new String(event.mMessageReceive));
     }
 
     public void onEventMainThread(BondedDevice event){
