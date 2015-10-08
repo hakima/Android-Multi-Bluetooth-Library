@@ -61,7 +61,11 @@ public class BluetoothServer implements Runnable
             {
                 len = mDataInputStream.readInt();
                 byte[] buffer = new byte[len];
-                mDataInputStream.read(buffer);
+                int read = 0;
+                do
+                {
+                    read += mDataInputStream.read(buffer, read, len-read);
+                }while(read < len);
                 EventBus.getDefault().post(new BluetoothCommunicator(mClientAddress, buffer));
             }
         } catch (IOException e)
